@@ -3,9 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Narrative AI</title>
+    <title>Narrative AI — интерактивные истории вместе с ИИ</title>
+    <meta name="description" content="Narrative AI — платформа интерактивных историй: выбирайте жанры, создавайте персонажей и локации, а нейросеть развивает сюжет в ответ на ваши решения.">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="./dist/output.css" rel="stylesheet">
     
     <style>
         :root {
@@ -131,7 +136,8 @@
             font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;
             letter-spacing: 0.5px; display: block; margin-bottom: 10px;
         }
-        .hero-banner h1 { font-size: 1.5rem; margin-bottom: 10px; max-width: 600px; line-height: 1.3; }
+        /* Был h1 -> стал h3: на странице должен быть один h1 (название страницы), уровни идут без пропусков */
+        .hero-banner h3 { font-size: 1.5rem; margin-bottom: 10px; max-width: 600px; line-height: 1.3; }
         .hero-banner p { color: var(--text-muted); font-size: 0.9rem; max-width: 600px; margin-bottom: 20px; line-height: 1.5; }
         .hero-actions { display: flex; gap: 15px; }
         .section-title { margin-bottom: 15px; font-size: 1.1rem; }
@@ -150,7 +156,7 @@
             <i class="fa-regular fa-gem"></i>
         </div>
 
-        <h1 class="logo">NARRATIVE AI</h1>
+        <h1 class="text-6xl font-bold text-red-500">NARRATIVE AI</h1>
         
         <div class="auth-card">
             <h2>Добро пожаловать</h2>
@@ -205,7 +211,7 @@
                 <div class="content-area">
                     <div class="hero-banner">
                         <span class="tagline">Погружайтесь в приключения</span>
-                        <h1>Проживайте истории, которые сочиняет ИИ вместе с вами</h1>
+                        <h3>Проживайте истории, которые сочиняет ИИ вместе с вами</h3>
                         <p>Выбирайте жанры, создавайте персонажей и локации, а нейросеть развивает повествование в ответ на ваши решения.</p>
                         <div class="hero-actions">
                             <button class="btn-primary small">Создать историю</button>
