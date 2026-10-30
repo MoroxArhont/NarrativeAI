@@ -1,0 +1,17 @@
+# Правила для всех роботов
+User-agent: *
+Disallow: /login
+Disallow: /register
+Disallow: /profile/
+Disallow: /my-stories/
+Disallow: /api/
+
+User-agent: Yandex
+Disallow: /login
+Disallow: /register
+Disallow: /profile/
+Disallow: /my-stories/
+Disallow: /api/
+Clean-param: utm_source&utm_medium&utm_campaign
+
+Sitemap: https://example.com/sitemap.xml
