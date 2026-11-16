@@ -14,4 +14,4 @@ Disallow: /my-stories/
 Disallow: /api/
 Clean-param: utm_source&utm_medium&utm_campaign
 
-Sitemap: https://example.com/sitemap.xml
+Sitemap: https://YOUR-DOMAIN/sitemap.xml

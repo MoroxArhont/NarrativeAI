@@ -1,0 +1,17 @@
+services:
+  narrative-ai:
+    build: .
+    container_name: narrative-ai
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      # Из контейнера localhost — это сам контейнер, поэтому локальный ИИ
+      # на Windows доступен через host.docker.internal.
+      NODE_ENV: production
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
