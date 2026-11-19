@@ -2,5 +2,8 @@ node_modules
 .git
 .vscode
 .env
-*.log
+.env.*
+!.env.example
 data/*.sqlite*
+*.log
+screenSHotiki
