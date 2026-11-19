@@ -1,0 +1,15 @@
+services:
+  narrative-ai:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: narrative-ai
+    ports:
+      - '3000:3000'
+    env_file:
+      - ../.env
+    environment:
+      NODE_ENV: production
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    restart: unless-stopped

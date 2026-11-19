@@ -1,0 +1,5 @@
+node_modules/
+public/dist/
+screenSHotiki/
+*.min.js
+*.min.css
