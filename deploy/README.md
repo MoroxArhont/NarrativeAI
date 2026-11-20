@@ -48,6 +48,6 @@ node --check server.js
 node --check public/app.js
 npm run format:check
 npm run css:build
-``
+```
 
 Публичное HTTPS-развёртывание, Nginx и TLS описаны в отдельном репозитории NarrativeAI-deploy.
