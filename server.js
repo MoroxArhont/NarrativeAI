@@ -161,7 +161,7 @@ const safeUser = (u, avatar = '') => ({
   avatar_data: avatar,
 });
 app.get('/api/health', (req, res) =>
-  res.json({ status: 'ok', app: 'Narrative AI', version: '3.0.0-supabase' }),
+  res.json({ status: 'ok', app: 'Narrative AI', version: '3.1.0-supabase' }),
 );
 app.post('/api/auth/register', authLimiter, async (req, res) => {
   try {
