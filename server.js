@@ -8,6 +8,7 @@ const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SUPABASE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || '';
+const APP_URL = String(process.env.APP_URL || '').replace(/\\/+$/, '');
 if (!SUPABASE_URL || !SUPABASE_KEY)
   console.warn('ВНИМАНИЕ: задайте SUPABASE_URL и SUPABASE_PUBLISHABLE_KEY в .env');
 app.disable('x-powered-by');
@@ -28,6 +29,33 @@ const aiLimiter = rateLimit({
 });
 const clamp = (v, min, max, def) =>
   Number.isFinite(Number(v)) ? Math.min(max, Math.max(min, Number(v))) : def;
+
+function encryptionKey() {
+  const value = String(process.env.APP_ENCRYPTION_KEY || '').trim();
+  if (!/^[a-f0-9]{64}$/i.test(value)) {
+    throw new Error('Задайте APP_ENCRYPTION_KEY: 64 hex-символа (32 случайных байта).');
+  }
+  return Buffer.from(value, 'hex');
+}
+
+function encryptSecret(value) {
+  if (!value) return null;
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', encryptionKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(String(value), 'utf8'), cipher.final()]);
+  return ['v1', iv.toString('base64'), cipher.getAuthTag().toString('base64'), encrypted.toString('base64')].join('.');
+}
+
+function decryptSecret(value) {
+  if (!value) return '';
+  const [version, ivText, tagText, encryptedText] = String(value).split('.');
+  if (version !== 'v1' || !ivText || !tagText || !encryptedText) {
+    throw new Error('Неизвестный формат сохранённого API-ключа.');
+  }
+  const decipher = crypto.createDecipheriv('aes-256-gcm', encryptionKey(), Buffer.from(ivText, 'base64'));
+  decipher.setAuthTag(Buffer.from(tagText, 'base64'));
+  return Buffer.concat([decipher.update(Buffer.from(encryptedText, 'base64')), decipher.final()]).toString('utf8');
+}
 function authHeaders(token) {
   return {
     apikey: SUPABASE_KEY,
@@ -148,7 +176,8 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Укажите корректную электронную почту.' });
     if (password.length < 8)
       return res.status(400).json({ error: 'Пароль должен содержать не менее 8 символов.' });
-    const data = await sbFetch('/auth/v1/signup', {
+    const redirectUrl = APP_URL || `${req.protocol}://${req.get('host')}`;
+    const data = await sbFetch(`/auth/v1/signup?redirect_to=${encodeURIComponent(redirectUrl)}`, {
       method: 'POST',
       body: { email, password, data: { name } },
     });
@@ -448,7 +477,7 @@ const DEFAULT_AI = {
   strict_canon: 1,
 };
 function publicAI(s) {
-  return {
+  const result = {
     ...DEFAULT_AI,
     ...s,
     director_model: s.director_model || 'qwen2.5:3b',
@@ -458,15 +487,20 @@ function publicAI(s) {
     random_events: Boolean(s.random_events),
     strict_canon: Boolean(s.strict_canon),
   };
+  delete result.api_key_ciphertext;
+  delete result.director_api_key_ciphertext;
+  return result;
 }
 app.get('/api/settings/ai', requireAuth, async (req, res) => {
   try {
     const rows = await sbFetch(`/rest/v1/user_settings?user_id=eq.${req.user.id}&select=*`, {
       token: req.accessToken,
     });
+    const saved = rows[0] || DEFAULT_AI;
     res.json({
-      settings: publicAI(rows[0] || DEFAULT_AI),
-      apiKeyConfigured: Boolean(process.env.AI_API_KEY),
+      settings: publicAI(saved),
+      apiKeyConfigured: Boolean(saved.api_key_ciphertext || process.env.AI_API_KEY),
+      directorApiKeyConfigured: Boolean(saved.director_api_key_ciphertext || saved.api_key_ciphertext || process.env.AI_API_KEY),
     });
   } catch (e) {
     sendDbError(res, e);
@@ -527,13 +561,19 @@ app.put('/api/settings/ai', requireAuth, async (req, res) => {
       strict_canon: b.strict_canon !== false,
       updated_at: new Date().toISOString(),
     };
+    const apiKey = String(b.api_key || '').trim();
+    const directorApiKey = String(b.director_api_key || '').trim();
+    if (b.api_key_clear) values.api_key_ciphertext = null;
+    else if (apiKey) values.api_key_ciphertext = encryptSecret(apiKey);
+    if (b.director_api_key_clear) values.director_api_key_ciphertext = null;
+    else if (directorApiKey) values.director_api_key_ciphertext = encryptSecret(directorApiKey);
     const rows = await sbFetch('/rest/v1/user_settings?on_conflict=user_id&select=*', {
       method: 'POST',
       token: req.accessToken,
       body: values,
       prefer: 'resolution=merge-duplicates,return=representation',
     });
-    res.json({ ok: true, settings: publicAI(rows[0]) });
+    res.json({ ok: true, settings: publicAI(rows[0]), apiKeyConfigured: Boolean(rows[0]?.api_key_ciphertext || process.env.AI_API_KEY), directorApiKeyConfigured: Boolean(rows[0]?.director_api_key_ciphertext || rows[0]?.api_key_ciphertext || process.env.AI_API_KEY) });
   } catch (e) {
     sendDbError(res, e);
   }
@@ -573,8 +613,9 @@ async function callModel(config, messages, params) {
           frequency_penalty: params.frequency_penalty,
         };
     const headers = { 'Content-Type': 'application/json' };
-    if (config.provider === 'api' && process.env.AI_API_KEY)
-      headers.Authorization = `Bearer ${process.env.AI_API_KEY}`;
+    const apiKey = config.api_key || process.env.AI_API_KEY;
+    if (config.provider === 'api' && apiKey)
+      headers.Authorization = `Bearer ${apiKey}`;
     const response = await fetch(endpoint, {
       method: 'POST',
       headers,
@@ -596,6 +637,39 @@ async function callModel(config, messages, params) {
     clearTimeout(timer);
   }
 }
+
+app.post('/api/settings/ai/test', requireAuth, aiLimiter, async (req, res) => {
+  try {
+    const rows = await sbFetch(`/rest/v1/user_settings?user_id=eq.${req.user.id}&select=*`, {
+      token: req.accessToken,
+    });
+    const saved = rows[0] || {};
+    const provider = ['ollama', 'lmstudio', 'api'].includes(req.body.provider) ? req.body.provider : null;
+    const base_url = String(req.body.base_url || '').trim().replace(/\\/+$/, '');
+    const model = String(req.body.model || '').trim().slice(0, 120);
+    let parsed;
+    try { parsed = new URL(base_url); } catch { parsed = null; }
+    const validUrl = parsed && ['http:', 'https:'].includes(parsed.protocol) &&
+      (provider !== 'api' || parsed.protocol === 'https:') &&
+      (provider === 'api' || ['localhost', '127.0.0.1', 'host.docker.internal'].includes(parsed.hostname));
+    if (!provider || !model || !validUrl) {
+      return res.status(400).json({ error: 'Проверьте провайдера, модель и адрес API.' });
+    }
+    const apiKey = String(req.body.api_key || '').trim() || decryptSecret(saved.api_key_ciphertext) || process.env.AI_API_KEY || '';
+    if (provider === 'api' && !apiKey) {
+      return res.status(400).json({ error: 'Добавьте API-токен в настройках ИИ.' });
+    }
+    const reply = await callModel(
+      { provider, base_url, model, api_key: apiKey },
+      [{ role: 'user', content: 'Ответь коротко: соединение установлено.' }],
+      { context_length: 2048, max_tokens: 48, temperature: 0.1, top_p: 0.9, repeat_penalty: 1.1, presence_penalty: 0, frequency_penalty: 0 },
+    );
+    res.json({ ok: true, model, reply });
+  } catch (error) {
+    res.status(502).json({ error: error.message || 'Не удалось проверить соединение с моделью.' });
+  }
+});
+
 const STYLE_RULES = {
   balanced:
     'Стиль: естественная художественная проза, ясные описания, живые диалоги, умеренная детализация. Не перегружай текст метафорами.',
@@ -607,6 +681,12 @@ const STYLE_RULES = {
 function storyFacts(story) {
   return `НАЗВАНИЕ: ${story.title}\nЖАНР: ${story.genre}\nОПИСАНИЕ МИРА И ЗАВЯЗКА:\n${story.description || 'Не заданы.'}\nГЛАВНЫЙ ГЕРОЙ: ${story.protagonist || 'Имя не задано.'}\nХАРАКТЕРИСТИКИ ГЕРОЯ:\n${story.protagonist_details || 'Не заданы.'}\nПЕРСОНАЖИ:\n${JSON.stringify(story.characters, null, 2)}\nЛОКАЦИИ:\n${JSON.stringify(story.locations, null, 2)}\nСОБЫТИЯ И ФАКТЫ КАНОНА:\n${JSON.stringify(story.events, null, 2)}`;
 }
+function shouldRunDirector(messages, currentText) {
+  const userTurns = messages.filter((message) => message.role === 'user').length;
+  const riskPattern = /(впервые|внезапно|оказалось|на самом деле|раньше|вчера|завтра|прошл|воспомин|узнал|узнала|тайн|секрет|перемест|телепорт|вернул|появил|исчез|убил|умер|ранен|спустя|до этого|после этого|сменил|новый персонаж|смена сцены|переход в|через (?:час|день|недел|месяц|год))/i;
+  return userTurns === 0 || userTurns % 4 === 0 || riskPattern.test(currentText);
+}
+
 app.post('/api/stories/:id/chat', requireAuth, aiLimiter, async (req, res) => {
   try {
     const storyRows = await sbFetch(
@@ -627,10 +707,8 @@ app.post('/api/stories/:id/chat', requireAuth, aiLimiter, async (req, res) => {
       return res
         .status(400)
         .json({ error: 'Сначала настройте модель Повествователя в разделе «Настройки ИИ».' });
-    if (userSettings.provider === 'api' && !process.env.AI_API_KEY)
-      return res
-        .status(400)
-        .json({ error: 'Для внешнего API добавьте AI_API_KEY в .env на сервере.' });
+    const narratorApiKey = decryptSecret(userSettings.api_key_ciphertext) || process.env.AI_API_KEY || '';
+    const directorApiKey = decryptSecret(userSettings.director_api_key_ciphertext) || narratorApiKey;
     const settings = { ...publicAI(userSettings), ...(story.ai_settings || {}) };
     const messages = story.messages || [],
       history = messages.slice(-24).map((m) => ({ role: m.role, content: m.content }));
@@ -652,21 +730,20 @@ app.post('/api/stories/:id/chat', requireAuth, aiLimiter, async (req, res) => {
     };
     let directorBrief =
       'Режиссёр отключён пользователем. Следуй напрямую заданному канону и фактам.';
-    if (settings.director_enabled) {
+    const directorUsed = Boolean(settings.director_enabled && shouldRunDirector(messages, text));
+    if (directorUsed) {
       const directorConfig = {
         provider: settings.director_provider || settings.provider,
         base_url: settings.director_base_url || settings.base_url,
         model: settings.director_model || settings.model,
+        api_key: directorApiKey,
       };
+      if (directorConfig.provider === 'api' && !directorConfig.api_key)
+        throw new Error('Добавьте API-токен режиссёра в настройках ИИ.');
       const canonRules = settings.strict_canon
         ? 'Считай описание мира и список фактов единственным источником канона. Не добавляй исторические эпохи, организации, технологии, географию, мистику или лор без основания. Не превращай неизвестное в тайну и не выдумывай загадочные земли, пророчества и силы.'
         : 'Соблюдай уже установленные факты. Допускай новые детали только если они правдоподобно вытекают из сцены и не противоречат описанию мира.';
-      const directorPrompt = `Ты — РЕЖИССЁР интерактивной истории и редактор непрерывности. Ты НЕ пишешь художественный текст и НЕ отвечаешь игроку. Твоя задача — составить компактное рабочее ТЗ для Повествователя.\n\n${storyFacts(story)}\n\nЖЁСТКИЕ ПРАВИЛА:\n1. ${canonRules}\n3. Не переноси элементы из других произведений и реального мира в канон без основания. Соблюдай конкретный сеттинг.\n4. Не управляй главным героем: не придумывай его реплики, мысли, решения и действия.\n5. Персонажи должны говорить и действовать согласно указанным характерам и уже известным событиям.\n6. Отмечай противоречия и запрещённые домыслы.\n\nПоследние реплики:\n${history
-        .slice(-10)
-        .map((m) => `${m.role}: ${m.content}`)
-        .join(
-          '\n',
-        )}\n\nДействие игрока сейчас: ${text}\n\nВерни краткий структурированный план на русском: ТЕКУЩАЯ СЦЕНА; ЧТО ДОЛЖНО ПРОИЗОЙТИ; РЕАКЦИИ NPC; ФАКТЫ, КОТОРЫЕ НЕЛЬЗЯ НАРУШАТЬ; ЧЕГО НЕ ДОБАВЛЯТЬ. Максимум 250 слов. Не пиши саму сцену.`;
+      const directorPrompt = `Ты — РЕЖИССЁР-КОРРЕКТОР интерактивной истории. Сейчас нужна проверка непрерывности и канона, а не очередная генерация плана. Не переписывай сцену и не придумывай новые события.\n\n${storyFacts(story)}\n\nПРАВИЛА:\n- ${canonRules}\n- Не управляй главным героем и не придумывай его мысли, реплики или решения.\n- Проверяй только факты, которые действительно противоречат заданному миру или предыдущим репликам. Не называй противоречием отсутствие подробностей.\n- Если противоречий нет, верни ровно: ПРОТИВОРЕЧИЙ НЕТ.\n- Если есть несоответствие, укажи его кратко и предложи минимальную правку для следующего ответа, не переписывая прошлые сообщения.\n\nПОСЛЕДНИЕ 6 СООБЩЕНИЙ:\n${history.slice(-6).map((m) => `${m.role}: ${m.content}`).join('\\n')}\n\nНОВОЕ ДЕЙСТВИЕ ИГРОКА:\n${text}\n\nОтвет — максимум 120 слов, только проверка и необходимые корректировки.`;
       directorBrief = await callModel(
         directorConfig,
         [
@@ -685,7 +762,7 @@ app.post('/api/stories/:id/chat', requireAuth, aiLimiter, async (req, res) => {
       : 'Соблюдай установленные факты. Новые детали допустимы, если они естественно следуют из сцены и не противоречат уже заданному миру.';
     const narratorPrompt = `Ты — ПОВЕСТВОВАТЕЛЬ интерактивной ролевой истории. Пиши на русском языке.\n\n${storyFacts(story)}\n\n${style}\n\nПРАВИЛА ПОВЕСТВОВАНИЯ — ОБЯЗАТЕЛЬНЫЕ:\n- ${canonNarratorRule}\n- Запрещён приём искусственной загадочности: многоточия через каждое предложение, «нечто древнее», «что-то не так», «тайна, которую никто не мог объяснить», туманные намёки и пафосные недосказанности. Если персонаж знает факт — пусть говорит прямо. Если не знает — пусть честно скажет, что не знает.\n- Не добавляй в знакомые вселенные несуществующие элементы канона. Не приписывай персонажам предметы одежды, устройства, способности и привычки, которых нет в заданном каноне. При сомнении используй только то, что точно известно из контекста, либо не уточняй деталь.\n- Не повторяй одну и ту же мысль разными словами. Избегай шаблонных фраз, пафосных вступлений и искусственных cliffhanger-ов.\n- Не управляй героем игрока: не описывай его новые действия, реплики, мысли, чувства и решения. Описывай окружающий мир и других персонажей, затем оставляй пространство для ответа игрока.\n- Сохраняй характеры NPC, географию, временную линию и уже установленные факты. Не меняй внезапно имена, возраст, внешность, отношения и обстоятельства.\n- Диалоги должны звучать естественно и соответствовать ситуации. Не заставляй каждого персонажа говорить загадками.\n- Развивай именно текущую сцену. Не перескакивай на новые сюжетные арки без причины.\n- ${settings.simple_actions ? 'Предпочитай естественные и понятные действия персонажей без искусственной драматизации.' : 'Допускай более сложные действия, если они логичны для сцены.'}\n- ${settings.random_events ? 'Допускаются небольшие случайные события, но только правдоподобные и не меняющие канон.' : 'Не вводи случайные события без причины.'}\n- ${settings.adult_content ? 'Допускается взрослый тон в рамках закона и правил платформы.' : 'Избегай откровенного взрослого контента.'}\n\nПЛАН РЕЖИССЁРА (соблюдай, но не показывай пользователю):\n${directorBrief}\n\nПиши продолжение сцены. Обычно 2–5 абзацев, если ситуация не требует другого объёма. Не пересказывай действие игрока в начале ответа.`;
     const answer = await callModel(
-      { provider: settings.provider, base_url: settings.base_url, model: settings.model },
+      { provider: settings.provider, base_url: settings.base_url, model: settings.model, api_key: narratorApiKey },
       [{ role: 'system', content: narratorPrompt }, ...history, { role: 'user', content: text }],
       params,
     );
@@ -700,7 +777,7 @@ app.post('/api/stories/:id/chat', requireAuth, aiLimiter, async (req, res) => {
       body: { messages: updated, updated_at: new Date().toISOString() },
       prefer: 'return=minimal',
     });
-    res.json({ answer, messages: updated, director_used: Boolean(settings.director_enabled) });
+    res.json({ answer, messages: updated, director_used: directorUsed });
   } catch (error) {
     console.error('AI request failed:', error);
     const msg =
