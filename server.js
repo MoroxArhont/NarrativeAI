@@ -563,6 +563,10 @@ app.put('/api/settings/ai', requireAuth, async (req, res) => {
     };
     const apiKey = String(b.api_key || '').trim();
     const directorApiKey = String(b.director_api_key || '').trim();
+    if (apiKey.length > 4096 || directorApiKey.length > 4096)
+      return res.status(400).json({ error: 'API-токен слишком длинный.' });
+    if ((apiKey || directorApiKey) && !/^[a-f0-9]{64}$/i.test(String(process.env.APP_ENCRYPTION_KEY || '').trim()))
+      return res.status(503).json({ error: 'На сервере не настроен APP_ENCRYPTION_KEY. Обратитесь к администратору приложения.' });
     if (b.api_key_clear) values.api_key_ciphertext = null;
     else if (apiKey) values.api_key_ciphertext = encryptSecret(apiKey);
     if (b.director_api_key_clear) values.director_api_key_ciphertext = null;
@@ -656,6 +660,7 @@ app.post('/api/settings/ai/test', requireAuth, aiLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Проверьте провайдера, модель и адрес API.' });
     }
     const apiKey = String(req.body.api_key || '').trim() || decryptSecret(saved.api_key_ciphertext) || process.env.AI_API_KEY || '';
+    if (apiKey.length > 4096) return res.status(400).json({ error: 'API-токен слишком длинный.' });
     if (provider === 'api' && !apiKey) {
       return res.status(400).json({ error: 'Добавьте API-токен в настройках ИИ.' });
     }
@@ -684,7 +689,7 @@ function storyFacts(story) {
 function shouldRunDirector(messages, currentText) {
   const userTurns = messages.filter((message) => message.role === 'user').length;
   const riskPattern = /(впервые|внезапно|оказалось|на самом деле|раньше|вчера|завтра|прошл|воспомин|узнал|узнала|тайн|секрет|перемест|телепорт|вернул|появил|исчез|убил|умер|ранен|спустя|до этого|после этого|сменил|новый персонаж|смена сцены|переход в|через (?:час|день|недел|месяц|год)|противореч|несоответ|неправиль|ошиб|ты путаешь|не так|не было|никогда|вместо)/i;
-  return userTurns === 0 || userTurns % 4 === 0 || riskPattern.test(currentText);
+  return userTurns === 0 || userTurns % 6 === 0 || riskPattern.test(currentText);
 }
 
 app.post('/api/stories/:id/chat', requireAuth, aiLimiter, async (req, res) => {
