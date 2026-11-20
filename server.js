@@ -683,7 +683,7 @@ function storyFacts(story) {
 }
 function shouldRunDirector(messages, currentText) {
   const userTurns = messages.filter((message) => message.role === 'user').length;
-  const riskPattern = /(впервые|внезапно|оказалось|на самом деле|раньше|вчера|завтра|прошл|воспомин|узнал|узнала|тайн|секрет|перемест|телепорт|вернул|появил|исчез|убил|умер|ранен|спустя|до этого|после этого|сменил|новый персонаж|смена сцены|переход в|через (?:час|день|недел|месяц|год))/i;
+  const riskPattern = /(впервые|внезапно|оказалось|на самом деле|раньше|вчера|завтра|прошл|воспомин|узнал|узнала|тайн|секрет|перемест|телепорт|вернул|появил|исчез|убил|умер|ранен|спустя|до этого|после этого|сменил|новый персонаж|смена сцены|переход в|через (?:час|день|недел|месяц|год)|противореч|несоответ|неправиль|ошиб|ты путаешь|не так|не было|никогда|вместо)/i;
   return userTurns === 0 || userTurns % 4 === 0 || riskPattern.test(currentText);
 }
 
@@ -730,8 +730,9 @@ app.post('/api/stories/:id/chat', requireAuth, aiLimiter, async (req, res) => {
       presence_penalty: 0.15,
       frequency_penalty: 0.2,
     };
-    let directorBrief =
-      'Режиссёр отключён пользователем. Следуй напрямую заданному канону и фактам.';
+    let directorBrief = settings.director_enabled
+      ? 'Проверка режиссёра в этом ходе пропущена для экономии токенов. Самостоятельно соблюдай канон и непротиворечивость.'
+      : 'Режиссёр отключён пользователем. Следуй напрямую заданному канону и фактам.';
     const directorUsed = Boolean(settings.director_enabled && shouldRunDirector(messages, text));
     if (directorUsed) {
       const directorConfig = {
