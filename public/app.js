@@ -6,6 +6,8 @@ const state = {
   stories: [],
   currentStory: null,
   ai: null,
+  apiKeyConfigured: false,
+  directorApiKeyConfigured: false,
   editingStory: null,
   editorTab: 'basic',
 };
@@ -135,6 +137,7 @@ async function logout() {
   setAuthMode('login');
 }
 $('logout-btn').onclick = logout;
+$('chat-back').onclick = () => navigate('stories');
 document
   .querySelectorAll('[data-page]')
   .forEach((b) => b.addEventListener('click', () => navigate(b.dataset.page)));
@@ -146,6 +149,7 @@ async function loadStories() {
 }
 async function navigate(page) {
   state.page = page;
+  $('app-screen').classList.toggle('chat-mode', page === 'play');
   state.currentStory = null;
   $('top-title').textContent = pageNames[page] || 'Narrative AI';
   document
@@ -156,7 +160,8 @@ async function navigate(page) {
     if (page === 'settings') {
       const r = await api('/api/settings/ai');
       state.ai = r.settings;
-      state.apiKeyConfigured = r.apiKeyConfigured;
+      state.apiKeyConfigured = Boolean(r.apiKeyConfigured);
+      state.directorApiKeyConfigured = Boolean(r.directorApiKeyConfigured);
     }
     renderPage();
   } catch (e) {
@@ -335,16 +340,24 @@ function renderAISettings(root) {
   const a = state.ai || {};
   const providerOpts = (v) =>
     `<option value="ollama" ${v === 'ollama' ? 'selected' : ''}>Ollama — локально</option><option value="lmstudio" ${v === 'lmstudio' ? 'selected' : ''}>LM Studio — локально</option><option value="api" ${v === 'api' ? 'selected' : ''}>Внешний API</option>`;
-  root.innerHTML = `<h1 class="page-title">Настройки ИИ-моделей</h1><p class="page-sub">Настройки по умолчанию для новых историй. Режиссёр контролирует логику, Повествователь пишет сцену.</p><form id="ai-form" class="settings-stack"><section class="panel"><div class="setting-title"><div><h3>ИИ-режиссёр</h3><p class="hint">Анализирует контекст и формирует план следующего эпизода.</p></div><label class="switch"><input id="ai-director-enabled" type="checkbox" ${a.director_enabled ? 'checked' : ''}><span></span></label></div><div class="form-grid" id="director-fields"><div><label>Провайдер режиссёра</label><select class="field" id="ai-director-provider">${providerOpts(a.director_provider)}</select></div><div><label>Модель режиссёра</label><input class="field" id="ai-director-model" value="${esc(a.director_model || '')}" placeholder="qwen2.5:3b"></div><div class="wide"><label>Адрес сервера режиссёра</label><input class="field" id="ai-director-url" value="${esc(a.director_base_url || 'http://127.0.0.1:11434/v1')}"></div></div></section>
- <section class="panel"><h3>ИИ-повествователь</h3><p class="hint">Генерирует художественный текст и диалоги.</p><div class="form-grid"><div><label>Провайдер</label><select class="field" id="ai-provider">${providerOpts(a.provider)}</select></div><div><label>Название модели</label><input class="field" id="ai-model" required value="${esc(a.model || '')}" placeholder="qwen3.5:4b"></div><div class="wide"><label>Адрес API</label><input class="field" id="ai-url" required value="${esc(a.base_url || 'http://127.0.0.1:11434/v1')}"></div></div><p class="hint">Ollama: http://127.0.0.1:11434/v1 · LM Studio: http://127.0.0.1:1234/v1. В Docker используйте host.docker.internal.</p></section>
- <section class="panel"><h3>Параметры генерации</h3><div class="setting-row"><label for="ai-context">Размер контекста</label><select class="field" id="ai-context"><option value="2048">2 048 токенов</option><option value="4096">4 096 токенов</option><option value="8192">8 192 токена</option><option value="16384">16 384 токена</option><option value="32768">32 768 токенов</option></select></div><div class="setting-row"><label for="ai-style">Стиль повествования</label><select class="field" id="ai-style"><option value="balanced">Сбалансированный</option><option value="creative">Творческий</option><option value="precise">Точный</option></select></div><div class="setting-row"><label for="ai-creativity">Креативность: <strong id="creativity-value">${Math.round((a.creativity ?? 0.75) * 100)}%</strong></label><input class="range" type="range" min="0" max="1" step="0.05" id="ai-creativity" value="${a.creativity ?? 0.75}"></div><div class="setting-row"><label for="ai-length">Длина ответа</label><select class="field" id="ai-length"><option value="short">Короткая</option><option value="medium">Средняя</option><option value="long">Длинная</option></select></div><div class="setting-row"><label for="ai-max-tokens">Максимум токенов ответа</label><input class="field" type="number" min="128" max="8192" step="128" id="ai-max-tokens" value="${a.max_tokens || 900}"></div></section>
- <section class="panel"><h3>Поведение повествования</h3>${toggleRow('ai-simple-actions', 'Предпочитать простые решения игрока', a.simple_actions)}${toggleRow('ai-adult', 'Разрешить взрослый контент (18+)', a.adult_content)}${toggleRow('ai-random', 'Случайные сюжетные события', a.random_events)}${toggleRow('ai-canon', 'Строго соблюдать канон и факты', a.strict_canon !== false)}</section><div class="actions"><button class="btn btn-primary" type="submit">Сохранить настройки</button><span class="status" id="ai-status"></span></div></form>`;
+  root.innerHTML = `<h1 class="page-title">Настройки ИИ-моделей</h1><p class="page-sub">Ключи принадлежат вашему аккаунту, шифруются на сервере и не возвращаются в браузер после сохранения.</p><form id="ai-form" class="settings-stack">
+ <section class="panel"><div class="setting-title"><div><h3>ИИ-режиссёр</h3><p class="hint">Проверяет непрерывность по необходимости: на первом ходе, примерно раз в четыре хода и при потенциально рискованных событиях.</p></div><label class="switch"><input id="ai-director-enabled" type="checkbox" ${a.director_enabled ? 'checked' : ''}><span></span></label></div><div class="form-grid" id="director-fields"><div><label>Провайдер режиссёра</label><select class="field" id="ai-director-provider">${providerOpts(a.director_provider)}</select></div><div><label>Модель режиссёра</label><input class="field" id="ai-director-model" value="${esc(a.director_model || '')}" placeholder="qwen2.5:3b"></div><div class="wide"><label>Адрес сервера режиссёра</label><input class="field" id="ai-director-url" value="${esc(a.director_base_url || 'http://127.0.0.1:11434/v1')}"></div><div class="wide api-key-field" id="director-api-key-wrap"><label for="ai-director-api-key">API-токен режиссёра</label><input class="field" type="password" id="ai-director-api-key" autocomplete="new-password" placeholder="${state.directorApiKeyConfigured ? 'Токен сохранён — оставьте пустым, чтобы не менять' : 'Вставьте API-токен'}"><small class="hint">${state.directorApiKeyConfigured ? 'Токен уже сохранён. Новое значение заменит его.' : 'Токен будет зашифрован перед сохранением.'}</small><label class="clear-key"><input type="checkbox" id="ai-director-api-key-clear"> Удалить сохранённый токен режиссёра</label></div></div></section>
+ <section class="panel"><h3>ИИ-повествователь</h3><p class="hint">Генерирует художественный текст и диалоги.</p><div class="form-grid"><div><label>Провайдер</label><select class="field" id="ai-provider">${providerOpts(a.provider)}</select></div><div><label>Название модели</label><input class="field" id="ai-model" required value="${esc(a.model || '')}" placeholder="gemini-3.1-flash"></div><div class="wide"><label>Адрес API</label><input class="field" id="ai-url" required value="${esc(a.base_url || 'http://127.0.0.1:11434/v1')}"></div><div class="wide api-key-field" id="narrator-api-key-wrap"><label for="ai-api-key">API-токен повествователя</label><input class="field" type="password" id="ai-api-key" autocomplete="new-password" placeholder="${state.apiKeyConfigured ? 'Токен сохранён — оставьте пустым, чтобы не менять' : 'Вставьте API-токен'}"><small class="hint">${state.apiKeyConfigured ? 'Токен уже сохранён. Новое значение заменит его.' : 'Токен будет зашифрован на сервере. Он не попадёт в JavaScript или Git.'}</small><label class="clear-key"><input type="checkbox" id="ai-api-key-clear"> Удалить сохранённый токен повествователя</label></div></div><p class="hint">Ollama: http://127.0.0.1:11434/v1 · LM Studio: http://127.0.0.1:1234/v1. Внешний API должен поддерживать OpenAI-совместимый /chat/completions.</p></section>
+ <section class="panel"><h3>Параметры генерации</h3><div class="setting-row"><label for="ai-context">Размер контекста</label><select class="field" id="ai-context"><option value="2048">2 048 токенов</option><option value="4096">4 096 токенов</option><option value="8192">8 192 токена</option><option value="16384">16 384 токенов</option><option value="32768">32 768 токенов</option></select></div><div class="setting-row"><label for="ai-style">Стиль повествования</label><select class="field" id="ai-style"><option value="balanced">Сбалансированный</option><option value="creative">Творческий</option><option value="precise">Точный</option></select></div><div class="setting-row"><label for="ai-creativity">Креативность: <strong id="creativity-value">${Math.round((a.creativity ?? 0.75) * 100)}%</strong></label><input class="range" type="range" min="0" max="1" step="0.05" id="ai-creativity" value="${a.creativity ?? 0.75}"></div><div class="setting-row"><label for="ai-length">Длина ответа</label><select class="field" id="ai-length"><option value="short">Короткая</option><option value="medium">Средняя</option><option value="long">Длинная</option></select></div><div class="setting-row"><label for="ai-max-tokens">Максимум токенов ответа</label><input class="field" type="number" min="128" max="8192" step="128" id="ai-max-tokens" value="${a.max_tokens || 900}"></div></section>
+ <section class="panel"><h3>Поведение повествования</h3>${toggleRow('ai-simple-actions', 'Предпочитать простые решения игрока', a.simple_actions)}${toggleRow('ai-adult', 'Разрешить взрослый контент (18+)', a.adult_content)}${toggleRow('ai-random', 'Случайные сюжетные события', a.random_events)}${toggleRow('ai-canon', 'Строго соблюдать канон и факты', a.strict_canon !== false)}</section><div class="actions"><button class="btn btn-primary" type="submit">Сохранить настройки</button><button class="btn btn-secondary" type="button" id="test-ai-connection">Проверить соединение</button><span class="status" id="ai-status"></span></div></form>`;
   $('ai-context').value = String(a.context_length || 8192);
   $('ai-style').value = a.style || 'balanced';
   $('ai-length').value = a.response_length || 'medium';
   $('ai-creativity').oninput = () => {
     $('creativity-value').textContent = Math.round($('ai-creativity').value * 100) + '%';
   };
+  const updateKeyVisibility = () => {
+    $('narrator-api-key-wrap').classList.toggle('hidden', $('ai-provider').value !== 'api');
+    $('director-api-key-wrap').classList.toggle('hidden', $('ai-director-provider').value !== 'api');
+  };
+  $('ai-provider').onchange = updateKeyVisibility;
+  $('ai-director-provider').onchange = updateKeyVisibility;
+  updateKeyVisibility();
   $('director-fields').classList.toggle('disabled-fields', !$('ai-director-enabled').checked);
   $('ai-director-enabled').onchange = () => {
     $('director-fields').classList.toggle('disabled-fields', !$('ai-director-enabled').checked);
@@ -367,17 +380,21 @@ function bindPageActions() {
     .querySelectorAll('[data-open-story]')
     .forEach((el) => (el.onclick = () => openStory(el.dataset.openStory)));
   const aiForm = $('ai-form');
-  if (aiForm)
+  if (aiForm) {
     aiForm.onsubmit = async (e) => {
       e.preventDefault();
       const body = {
         provider: $('ai-provider').value,
         base_url: $('ai-url').value,
         model: $('ai-model').value,
+        api_key: $('ai-api-key').value,
+        api_key_clear: $('ai-api-key-clear').checked,
         director_enabled: $('ai-director-enabled').checked,
         director_provider: $('ai-director-provider').value,
         director_base_url: $('ai-director-url').value,
         director_model: $('ai-director-model').value,
+        director_api_key: $('ai-director-api-key').value,
+        director_api_key_clear: $('ai-director-api-key-clear').checked,
         context_length: Number($('ai-context').value),
         style: $('ai-style').value,
         creativity: Number($('ai-creativity').value),
@@ -391,13 +408,44 @@ function bindPageActions() {
       try {
         const r = await api('/api/settings/ai', { method: 'PUT', body: JSON.stringify(body) });
         state.ai = r.settings;
-        $('ai-status').textContent = 'Настройки сохранены.';
+        state.apiKeyConfigured = Boolean(r.apiKeyConfigured);
+        state.directorApiKeyConfigured = Boolean(r.directorApiKeyConfigured);
+        $('ai-api-key').value = '';
+        $('ai-director-api-key').value = '';
+        $('ai-status').textContent = 'Настройки сохранены. API-токены хранятся в зашифрованном виде.';
+        $('ai-status').classList.remove('danger');
         toast('Настройки ИИ сохранены');
+        renderAISettings(root);
       } catch (err) {
         $('ai-status').textContent = err.message;
         $('ai-status').classList.add('danger');
       }
     };
+    $('test-ai-connection').onclick = async () => {
+      const button = $('test-ai-connection');
+      const status = $('ai-status');
+      button.disabled = true;
+      status.textContent = 'Проверяем соединение…';
+      status.classList.remove('danger');
+      try {
+        const result = await api('/api/settings/ai/test', {
+          method: 'POST',
+          body: JSON.stringify({
+            provider: $('ai-provider').value,
+            base_url: $('ai-url').value,
+            model: $('ai-model').value,
+            api_key: $('ai-api-key').value,
+          }),
+        });
+        status.textContent = `Соединение успешно: ${result.model}. Ответ: ${result.reply}`;
+      } catch (err) {
+        status.textContent = err.message;
+        status.classList.add('danger');
+      } finally {
+        button.disabled = false;
+      }
+    };
+  }
   on('save-profile', async () => {
     try {
       const r = await api('/api/profile', {
@@ -445,6 +493,7 @@ async function openStory(id) {
     const r = await api(`/api/stories/${id}`);
     state.currentStory = r.story;
     state.page = 'play';
+    $('app-screen').classList.add('chat-mode');
     $('top-title').textContent = pageNames.play;
     document.querySelectorAll('[data-page]').forEach((b) => b.classList.remove('active'));
     renderPage();
@@ -490,7 +539,7 @@ function renderPlay(root, s) {
     appendBubble('user', message);
     const send = $('chat-form').querySelector('button');
     send.disabled = true;
-    const wait = appendBubble('assistant', 'Режиссёр анализирует сцену…');
+    const wait = appendBubble('assistant', 'Повествователь готовит ответ…');
     try {
       const r = await api(`/api/stories/${s.id}/chat`, {
         method: 'POST',
@@ -517,6 +566,18 @@ function appendBubble(role, content) {
   $('chat-body').scrollTop = $('chat-body').scrollHeight;
   return el;
 }
+function consumeAuthRedirect() {
+  const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const accessToken = params.get('access_token');
+  const refreshToken = params.get('refresh_token');
+  if (accessToken && refreshToken) {
+    localStorage.setItem('narrative_access_token', accessToken);
+    localStorage.setItem('narrative_refresh_token', refreshToken);
+    window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+  }
+}
+consumeAuthRedirect();
+
 (async () => {
   try {
     const r = await api('/api/auth/me');
