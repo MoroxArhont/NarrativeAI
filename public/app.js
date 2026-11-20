@@ -3,6 +3,7 @@ const state = {
   user: null,
   authMode: 'login',
   page: 'home',
+  previousPage: 'home',
   stories: [],
   currentStory: null,
   ai: null,
@@ -137,7 +138,7 @@ async function logout() {
   setAuthMode('login');
 }
 $('logout-btn').onclick = logout;
-$('chat-back').onclick = () => navigate('stories');
+$('chat-back').onclick = () => navigate(state.previousPage || 'stories');
 document
   .querySelectorAll('[data-page]')
   .forEach((b) => b.addEventListener('click', () => navigate(b.dataset.page)));
@@ -496,6 +497,7 @@ async function openStory(id) {
   try {
     const r = await api(`/api/stories/${id}`);
     state.currentStory = r.story;
+    state.previousPage = state.page === 'play' ? state.previousPage : state.page;
     state.page = 'play';
     $('app-screen').classList.add('chat-mode');
     $('top-title').textContent = pageNames.play;
