@@ -8,7 +8,7 @@ const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SUPABASE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || '';
-const APP_URL = String(process.env.APP_URL || '').replace(/\\/+$/, '');
+const APP_URL = String(process.env.APP_URL || '').replace(/\/+$/, '');
 if (!SUPABASE_URL || !SUPABASE_KEY)
   console.warn('ВНИМАНИЕ: задайте SUPABASE_URL и SUPABASE_PUBLISHABLE_KEY в .env');
 app.disable('x-powered-by');
@@ -645,7 +645,7 @@ app.post('/api/settings/ai/test', requireAuth, aiLimiter, async (req, res) => {
     });
     const saved = rows[0] || {};
     const provider = ['ollama', 'lmstudio', 'api'].includes(req.body.provider) ? req.body.provider : null;
-    const base_url = String(req.body.base_url || '').trim().replace(/\\/+$/, '');
+    const base_url = String(req.body.base_url || '').trim().replace(/\/+$/, '');
     const model = String(req.body.model || '').trim().slice(0, 120);
     let parsed;
     try { parsed = new URL(base_url); } catch { parsed = null; }
