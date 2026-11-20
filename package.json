@@ -1,6 +1,6 @@
 {
   "name": "narrative-ai",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "private": true,
   "description": "NarrativeAI — интерактивные истории с Supabase Auth, PostgreSQL и Storage",
   "main": "server.js",
