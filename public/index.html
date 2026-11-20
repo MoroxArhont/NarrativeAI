@@ -848,6 +848,141 @@
           height: 180px;
         }
       }
+
+      /* v3.1: fixed navigation and an isolated conversation viewport */
+      .app {
+        height: 100vh;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .sidebar {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        min-height: 0;
+        overflow-y: auto;
+      }
+      .main {
+        height: 100vh;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .topbar {
+        flex: 0 0 72px;
+      }
+      .content {
+        flex: 1;
+        min-height: 0;
+        width: 100%;
+        margin: 0 auto;
+        overflow-y: auto;
+      }
+      .chat-back {
+        display: none;
+        border: 0;
+        background: transparent;
+        color: var(--white);
+        font-size: 18px;
+        padding: 8px 10px 8px 0;
+      }
+      .app.chat-mode .content {
+        display: flex;
+        overflow: hidden;
+        max-width: none;
+        padding-top: 14px;
+        padding-bottom: 14px;
+      }
+      .app.chat-mode #page-content {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        width: 100%;
+        min-height: 0;
+      }
+      .app.chat-mode .chat-panel {
+        flex: 1;
+        height: 100%;
+        min-height: 0;
+      }
+      .app.chat-mode .chat-body {
+        flex: 1;
+        min-height: 0;
+        max-height: none;
+        overflow-y: auto;
+      }
+      .app.chat-mode #back-stories {
+        display: none;
+      }
+      @media (max-width: 650px) {
+        .app {
+          height: auto;
+          min-height: 100vh;
+          overflow: visible;
+        }
+        .sidebar {
+          position: sticky;
+          height: auto;
+          min-height: auto;
+          overflow: visible;
+        }
+        .main {
+          height: auto;
+          min-height: calc(100vh - 90px);
+          overflow: visible;
+        }
+        .topbar {
+          flex-basis: 58px;
+        }
+        .app.chat-mode {
+          height: 100dvh;
+          min-height: 0;
+          overflow: hidden;
+        }
+        .app.chat-mode .sidebar {
+          display: none;
+        }
+        .app.chat-mode .main {
+          height: 100dvh;
+          min-height: 0;
+          overflow: hidden;
+        }
+        .app.chat-mode .topbar {
+          flex: 0 0 58px;
+          justify-content: flex-start;
+          gap: 12px;
+          padding: 0 16px;
+        }
+        .app.chat-mode .chat-back {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .app.chat-mode .content {
+          height: calc(100dvh - 58px);
+          flex: 0 0 calc(100dvh - 58px);
+          padding: 8px;
+        }
+        .app.chat-mode .chat-panel {
+          border-radius: 10px;
+        }
+        .app.chat-mode .chat-head {
+          padding: 12px 14px;
+        }
+        .app.chat-mode .chat-body {
+          max-height: none;
+          padding: 14px;
+        }
+        .app.chat-mode .chat-compose {
+          padding: 10px;
+          padding-bottom: max(10px, env(safe-area-inset-bottom));
+        }
+        .app.chat-mode .chat-compose textarea {
+          min-width: 0;
+          max-height: 100px;
+        }
+      }
     </style>
   </head>
   <body>
@@ -942,6 +1077,9 @@
       </aside>
       <main class="main">
         <header class="topbar">
+          <button id="chat-back" class="chat-back" type="button" aria-label="Назад к историям">
+            <i class="fa-solid fa-arrow-left"></i>
+          </button>
           <h2 id="top-title">Главная</h2>
           <div id="top-avatar-wrap"><div class="avatar">N</div></div>
         </header>
