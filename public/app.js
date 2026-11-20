@@ -355,7 +355,10 @@ function renderAISettings(root) {
   };
   const updateKeyVisibility = () => {
     $('narrator-api-key-wrap').classList.toggle('hidden', $('ai-provider').value !== 'api');
-    $('director-api-key-wrap').classList.toggle('hidden', $('ai-director-provider').value !== 'api');
+    $('director-api-key-wrap').classList.toggle(
+      'hidden',
+      $('ai-director-provider').value !== 'api',
+    );
   };
   $('ai-provider').onchange = updateKeyVisibility;
   $('ai-director-provider').onchange = updateKeyVisibility;
@@ -414,10 +417,15 @@ function bindPageActions() {
         state.directorApiKeyConfigured = Boolean(r.directorApiKeyConfigured);
         $('ai-api-key').value = '';
         $('ai-director-api-key').value = '';
-        $('ai-status').textContent = 'Настройки сохранены. API-токены хранятся в зашифрованном виде.';
+        $('ai-status').textContent =
+          'Настройки сохранены. API-токены хранятся в зашифрованном виде.';
         $('ai-status').classList.remove('danger');
-        $('ai-api-key').placeholder = state.apiKeyConfigured ? 'Токен сохранён — оставьте пустым, чтобы не менять' : 'Вставьте API-токен';
-        $('ai-director-api-key').placeholder = state.directorApiKeyConfigured ? 'Токен сохранён — оставьте пустым, чтобы не менять' : 'Вставьте API-токен';
+        $('ai-api-key').placeholder = state.apiKeyConfigured
+          ? 'Токен сохранён — оставьте пустым, чтобы не менять'
+          : 'Вставьте API-токен';
+        $('ai-director-api-key').placeholder = state.directorApiKeyConfigured
+          ? 'Токен сохранён — оставьте пустым, чтобы не менять'
+          : 'Вставьте API-токен';
         $('ai-api-key-clear').checked = false;
         $('ai-director-api-key-clear').checked = false;
         toast('Настройки ИИ сохранены');
@@ -580,7 +588,11 @@ function consumeAuthRedirect() {
   if (accessToken && refreshToken) {
     localStorage.setItem('narrative_access_token', accessToken);
     localStorage.setItem('narrative_refresh_token', refreshToken);
-    window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+    window.history.replaceState(
+      {},
+      document.title,
+      window.location.pathname + window.location.search,
+    );
   }
 }
 consumeAuthRedirect();
