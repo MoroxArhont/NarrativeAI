@@ -31,14 +31,6 @@ jobs:
           node --check server.js
           node --check public/app.js
 
-      - name: Format and export server source
-        run: |
-          npx prettier --write server.js
-          echo "FORMATTED_FILE:server.js"
-          base64 -w0 server.js
-          echo
-          echo "END_FORMATTED_FILE"
-
       - name: Check code formatting
         run: npm run format:check
 
