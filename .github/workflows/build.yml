@@ -31,17 +31,8 @@ jobs:
           node --check server.js
           node --check public/app.js
 
-      - name: Format source files
-        run: npm run format
-
-      - name: Export formatted source files
-        run: |
-          for file in README.md server.js public/app.js public/index.html deploy/README.md; do
-            echo "FORMATTED_FILE:$file"
-            base64 -w0 "$file"
-            echo
-            echo "END_FORMATTED_FILE"
-          done
+      - name: Check code formatting
+        run: npm run format:check
 
       - name: Build application CSS
         run: npm run css:build
