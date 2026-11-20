@@ -34,9 +34,6 @@ jobs:
       - name: Format source files
         run: npm run format
 
-      - name: Check code formatting
-        run: npm run format:check
-
       - name: Export formatted source files
         run: |
           for file in README.md server.js public/app.js public/index.html deploy/README.md; do
