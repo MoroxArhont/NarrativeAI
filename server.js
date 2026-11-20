@@ -583,12 +583,9 @@ app.put('/api/settings/ai', requireAuth, async (req, res) => {
       (apiKey || directorApiKey) &&
       !/^[a-f0-9]{64}$/i.test(String(process.env.APP_ENCRYPTION_KEY || '').trim())
     )
-      return res
-        .status(503)
-        .json({
-          error:
-            'На сервере не настроен APP_ENCRYPTION_KEY. Обратитесь к администратору приложения.',
-        });
+      return res.status(503).json({
+        error: 'На сервере не настроен APP_ENCRYPTION_KEY. Обратитесь к администратору приложения.',
+      });
     if (b.api_key_clear) values.api_key_ciphertext = null;
     else if (apiKey) values.api_key_ciphertext = encryptSecret(apiKey);
     if (b.director_api_key_clear) values.director_api_key_ciphertext = null;
