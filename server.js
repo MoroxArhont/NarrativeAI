@@ -710,6 +710,8 @@ app.post('/api/stories/:id/chat', requireAuth, aiLimiter, async (req, res) => {
     const narratorApiKey = decryptSecret(userSettings.api_key_ciphertext) || process.env.AI_API_KEY || '';
     const directorApiKey = decryptSecret(userSettings.director_api_key_ciphertext) || narratorApiKey;
     const settings = { ...publicAI(userSettings), ...(story.ai_settings || {}) };
+    if (settings.provider === 'api' && !narratorApiKey)
+      return res.status(400).json({ error: 'Добавьте API-токен повествователя в настройках ИИ.' });
     const messages = story.messages || [],
       history = messages.slice(-24).map((m) => ({ role: m.role, content: m.content }));
     const style = STYLE_RULES[settings.style] || STYLE_RULES.balanced;
