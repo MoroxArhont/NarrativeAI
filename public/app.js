@@ -330,6 +330,7 @@ async function openEditor(id) {
   }
   state.editorTab = 'basic';
   state.page = 'create';
+  $('app-screen').classList.remove('chat-mode');
   $('top-title').textContent = 'Редактор истории';
   renderPage();
 }
@@ -414,8 +415,11 @@ function bindPageActions() {
         $('ai-director-api-key').value = '';
         $('ai-status').textContent = 'Настройки сохранены. API-токены хранятся в зашифрованном виде.';
         $('ai-status').classList.remove('danger');
+        $('ai-api-key').placeholder = state.apiKeyConfigured ? 'Токен сохранён — оставьте пустым, чтобы не менять' : 'Вставьте API-токен';
+        $('ai-director-api-key').placeholder = state.directorApiKeyConfigured ? 'Токен сохранён — оставьте пустым, чтобы не менять' : 'Вставьте API-токен';
+        $('ai-api-key-clear').checked = false;
+        $('ai-director-api-key-clear').checked = false;
         toast('Настройки ИИ сохранены');
-        renderAISettings(root);
       } catch (err) {
         $('ai-status').textContent = err.message;
         $('ai-status').classList.add('danger');
@@ -516,6 +520,7 @@ function renderPlay(root, s) {
   $('back-stories').onclick = () => navigate('stories');
   $('story-profile').onclick = () => {
     state.page = 'storyProfile';
+    $('app-screen').classList.remove('chat-mode');
     $('top-title').textContent = pageNames.storyProfile;
     renderPage();
   };
